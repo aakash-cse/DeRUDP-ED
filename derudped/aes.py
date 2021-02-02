@@ -3,9 +3,9 @@ import hashlib
 from Crypto import Random
 from Crypto.Cipher import AES
 
-class AESCipher(object):
+class AESCipher():
 
-    def __init__(self, key): 
+    def __init__(self, key="Aakash"): 
         self.bs = AES.block_size
         self.key = hashlib.sha256(key.encode()).digest()
 

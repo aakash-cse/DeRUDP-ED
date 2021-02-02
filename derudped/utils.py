@@ -1,3 +1,15 @@
+import time
+
+def writeLog(log_data):        # writes log
+    f = open(r'Log.txt', 'a+')
+    secondsSinceEpoch = time.time()
+    timeObj = time.localtime(secondsSinceEpoch)
+    time_stamp = str(('%d/%d/%d %d:%d:%d' % (
+        timeObj.tm_mday, timeObj.tm_mon, timeObj.tm_year, timeObj.tm_hour, timeObj.tm_min, timeObj.tm_sec)))
+    f.write(time_stamp+'  '+log_data+' '+'\n')
+    return
+
+"""
 class ThreeWayHandshake:
 
     def __init__(self, twh=None):
@@ -28,3 +40,21 @@ class ThreeWayHandshake:
 
     def __str__(self):
         return f"status: {self.status}, connection established: {self.connected}."
+
+
+'''
+flag = threewayhandshake()
+if flag:
+    loadData() => it will load the data into the queue and ready to send the packets
+    sendData()
+    terminate()
+terminate():
+    if data lost:
+        get lost data number
+        sendData()
+        terminate()
+    else:
+        reorganise()
+        exit()
+'''
+"""
