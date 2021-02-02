@@ -2,6 +2,7 @@ from __future__ import absolute_import
 import socket
 from aes import AESCipher
 from packet import Packet
+from constants import MAX_PCKT_SIZE
 
 class DerudpClient():
     def __init__(self,debug=False):
@@ -14,16 +15,30 @@ class DerudpClient():
         pass
 
     def _sendSyn(self):
-        pass
-    
+        self.synpacket = Packet(b'0001|:|:|syn')
+        self.sock.sendto(self.synpacket.encode(),self.address)
+        self.synFlag = True
+        self._receiveAck()
+
     def _receiveAck(self):
-        pass
+        data,_ = self.sock.recvfrom(MAX_PCKT_SIZE)
+        if data.payload=="ack":
+            self.acceptAck = True
+            self._sendKey()
 
     def _sendKey(self):
-        #key = ""
+        key=b''
+        self.packKey = Packet(b'0001|:|:|'+key)
+        self.sock.sendto(self.packKey.encode(),self.address)
+        self.twhShake = True
         pass
 
     def _sendHeartBeat(self):
+        """
+        This function send the heartbeat
+        packet to the server to make the conneciton
+        alive
+        """
         pass
 
     def _loadData(self): # additional method for sender/client alone
@@ -37,7 +52,8 @@ class DerudpClient():
         3. set the address as the class variables
         """
         self.address = address
-        self._sendSyn() # sending syn function
+        while self.synFlag!=True:
+            self._sendSyn() # sending syn function
         self._receiveAck() # receiving ack function
         self._sendKey() # sending syn-ack + key function
         if self.twhShake: # checking for above threefunction successful
