@@ -11,8 +11,8 @@
 4. if connection established.. sends the packets to the two data buffer-queue.
 5. Now if in data buffer-queue, 
 	Derudp adopts 
-* queue-partition recognition
-* queue-partition reorganization
+	* queue-partition recognition
+	* queue-partition reorganization
 
 6. Both the sides, data in each buffer-queue has
 		* buffer-queue name
