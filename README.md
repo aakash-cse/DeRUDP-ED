@@ -15,13 +15,13 @@
 	* queue-partition reorganization
 
 6. Both the sides, data in each buffer-queue has
-		* buffer-queue name
-		* data number flag (the packet start number and end number)
-		* over-time variability
-		* time-out flag
-		* packets loss flag
-		* packets retransmission data area
-		* packets send data area
+	* buffer-queue name
+	* data number flag (the packet start number and end number)
+	* over-time variability
+	* time-out flag
+	* packets loss flag
+	* packets retransmission data area
+	* packets send data area
 7. The retransmission data area stores the packet number to be retransmitted
 8. The sending data area stores the packet number of the current queue to be sent.
 9. The receiver also has the same buffer-queue used to store the received data packets
