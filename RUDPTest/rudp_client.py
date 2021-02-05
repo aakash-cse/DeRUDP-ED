@@ -5,6 +5,8 @@ from listener import Listener
 from constants import MAX_PCKT_SIZE, POLL_INTERVAL, TIMEOUT
 from timer import Timer
 from collections import deque
+import datetime 
+from threading import Lock
 
 class RUDPClient:
     # need to add the buffer queue for the retransmission and then another list for set of seqno for retransmission
@@ -14,6 +16,7 @@ class RUDPClient:
         self.recv_seq = 0
         self.write_buffer = deque()  # this has to be replaced with Queue
         self.read_buffer = deque()  # this has to be replaced with Queue
+        self.mut = Lock()
         self.connected = False
         self.closed = False
         self.timer = None
@@ -48,6 +51,10 @@ class RUDPClient:
         pckt = Packet()
         pckt.fin = 1
         pckt.ack = 1
+        if self.debug:
+            print(datetime.datetime.now().time())
+            print("Packet sent:")
+            print(pckt)
         self.sock.sendto(pckt.encode(), self.server_addr)
 
     # called by listener thread and used to read the data packet to particular source_addr
@@ -57,8 +64,10 @@ class RUDPClient:
         Note: this function is upcalled by the listener thread
         '''
         if self.debug:
+            print(datetime.datetime.now().time())
+            print("Packet sent:")
             print(pckt)
-        
+
         # Ignore unknown response
         if source_addr != self.server_addr:
             return
@@ -82,8 +91,13 @@ class RUDPClient:
         # Discarding out of order packets for now
         if pckt.ack:
             count = pckt.ackno - self.send_seq
+            if count <= 0:
+                return
+            # Access write buffer with mutex 
+            self.mut.acquire()
             self.write_buffer = deque(list(self.write_buffer)[count:])   # this has to be replaced with Queue
             self.send_seq = pckt.ackno
+            self.mut.release()
         else:
             if pckt.seqno == self.recv_seq:
                 self.read_buffer.append(pckt.payload)    # this has to be replaced with Queue
@@ -94,9 +108,15 @@ class RUDPClient:
             self.sock.sendto(pckt.encode(), source_addr)
 
     def write(self, pckt):
+        self.mut.acquire()
         pckt.seqno = self.send_seq + len(self.write_buffer) # this has to be replaced with Queue
-        self.sock.sendto(pckt.encode(), self.server_addr)
+        if self.debug:
+            print(datetime.datetime.now().time())
+            print("Packet sent:")
+            print(pckt)
         self.write_buffer.append(pckt)  # this has to be replaced with Queue
+        self.mut.release()
+        self.sock.sendto(pckt.encode(), self.server_addr)
         if self.timer == None or not self.timer.running:
             self.timer = Timer(self.timeout, TIMEOUT)
             self.timer.start()
@@ -105,6 +125,10 @@ class RUDPClient:
         if len(self.write_buffer) == 0: # this has to be replaced with Queue
             return
         for pckt in self.write_buffer:  # this has to be replaced with Queue
+            if self.debug:
+                print(datetime.datetime.now().time())
+                print("Packet sent:")
+                print(pckt)
             self.sock.sendto(pckt.encode(), self.server_addr)
         self.timer = Timer(self.timeout, TIMEOUT)
         self.timer.start()
@@ -163,7 +187,7 @@ class RUDPClient:
             # Wait till all data is sent
             while len(self.write_buffer) > 0:
                 time.sleep(POLL_INTERVAL)
-            # send FIN
+            # send FIN-ACK
             pckt = Packet()
             pckt.fin = 1
             self.write(pckt)
