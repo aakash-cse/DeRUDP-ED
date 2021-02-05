@@ -1,81 +1,111 @@
 from __future__ import absolute_import
 import socket
-from aes import AESCipher
-from packet import Packet
-from constants import MAX_PCKT_SIZE
 import time
+from threading import Lock
+from .utils import *
 
 class DerudpClient():
     def __init__(self,debug=False):
         """
-        some class variables goes here
+        class definition of our custom derudpclient| sender 
         """
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.setblocking(1)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+        self.seqSend = 0
+        self.seqNext = 0
+        self.writeBuff = [None]*MAX_BYTES # replace it with queue
+        self.readBuff = b'' # replace it with queue
+        self.order = [None]*MAX_BYTES 
+        self.mutexW = Lock()
+        self.mutexR = Lock()
+        self.isConnected = False
+        self.isClosed = False
+        self.timer = None
+        self.buffer = 0
         self.debug = debug
-        self.twhShake = False
-        self.synFlag = False
-        pass
-
-    def _sendSyn(self):
-        self.synpacket = Packet(b'0001|:|:|syn')
-        self.sock.sendto(self.synpacket.encode(),self.address)
-        print("Send the syn packet")
-        self.synFlag = True
-        time.sleep(2)
-        self._receiveAck()
-
-    def _receiveAck(self):
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        data,_ = self.sock.recvfrom(MAX_PCKT_SIZE)
-        data = Packet(data).payload.decode("utf-8")
-        if data=="ack":
-            self.acceptAck = True
-            print("Received the ACK packet")
-            self._sendKey()
-
-    def _sendKey(self):
-        self.packKey = Packet(b'0001|:|:|HelloWorld')
-        self.sock.sendto(self.packKey.encode(),self.address)
-        print("Send the key packet")
-        self.twhShake = True
-        time.sleep(2)
-
-    def _sendHeartBeat(self):
-        """
-        This function send the heartbeat
-        packet to the server to make the conneciton
-        alive
-        """
-        pass
-
-    def _loadData(self): # additional method for sender/client alone
-        pass
-
+        self.dropped = 0
+        self.key = b''
+    
     def connect(self,address):
         """
-        This method does the following thing
-        1. three way handshake with the address
-        2. load the data 
-        3. set the address as the class variables
-        """
-        self.address = address
-        self._sendSyn() # sending syn function
-        #if self.twhShake: # checking for above threefunction successful
-        #    self._loadData()     # load the data into the queue   
+        This function is used to initiate the threeway handshake to address
+        send the syn packet and wait for the connection to establish
 
-    def sendto(self):
+        Args:
+            address ([tuple]): (ipaddress,port) : eg ("192.168.72.2",8080)
+        """
+        packet = Packet()
+        packet.syn = 1
+        self.Listener = Listener(self) # passing the client socket for the listener
+        self.Listener.start()
+        self.serverAddress = address
+        self.key = b''.join(address)
+        self.cipher = AESCipher(self.key)
+        self.__writeData(packet)
+        # wait for the connection to establish so make listener to sleep
+        ite = 0
+        while not self.isConnected:
+            ite+=1 #increment the iterator
+            time.sleep(POLL_INTERVAL)
+            if ite>=150:
+                raise Exception("Cannot Reach the Host")
+    
+    def __writeData(self,packet):
+        """This funciton is used to write the packet into the writebuffer
+
+        Args:
+            packet ([Packet]): Contains the custom UDPdata
+        """
         pass
+
+    def __readData(self,packet,address):
+        """This function is used to read the packet from the address
+
+        Args:
+            packet ([Packet]): Contains the custom UDPdata
+            address ([tuple]): Contains the server address as a tuples
+        """
+        pass
+    
+    def timeoutcallback(self):
+        """This function is used as the callback for the timeoutevent
+        """
+        pass
+
+    def send(self,data):
+        """This function sends the packet to write function where the payload is encrypted
+
+        Args:
+            data ([Packet]): Data which was packet and send through the write function
+        """
+        if self.isClosed and not self.isConnected:
+            raise Exception("Cannot send the data")
+        while len(data) > 0:
+            rem = min(len(data), MAX_PCKT_SIZE)
+            payload = data[:rem] # replace the data with the queue
+            # wait till receiver has acked enough bytes
+            while self.buffer + rem > MAX_BYTES:
+                time.sleep(POLL_INTERVAL)
+            self.buffer += rem
+            data = data[rem:] 
+            pckt = Packet()
+            pckt.payload = self.cipher.encrypt(payload) # encrypting the data
+            self.write(pckt)
 
     def close(self):
-        pass
+        """This function closes the connection with the server
+        """
+        self.isClosed = True
+        if self.isConnected:
+            self.isConnected = False    
+            while self.seqSend<self.seqNext:
+                time.sleep(POLL_INTERVAL)
 
-    def _getLostPacket(self):
-        pass    
-
-def test():
-    client = DerudpClient()
-    client.connect(("127.0.0.1",6789))
-
-test()
+            # send the fin packet
+            packet = Packet()
+            packet.fin = 1
+            self.__writeData(packet)
+            ite = 0
+            while self.seqSend<self.seqNext and ite <100:
+                time.sleep(POLL_INTERVAL)
+                ite +=1
+        self.__finAck()

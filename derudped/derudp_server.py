@@ -1,77 +1,136 @@
-from __future__ import absolute_import
-from packet import Packet
 import socket
-from aes import AESCipher
-from constants import MAX_PCKT_SIZE
 import time
+from .utils import *
 
 class DerudpServer():
     def __init__(self,debug=False):
-        """
-        some class variables goes here
-        """
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.setblocking(1)
+        self.isBinded = False
+        self.isListening = False
+        self.isClosed = False
         self.debug = debug
-        self.key = ""
-        pass
-
-    def _receiveSyn(self):
-        data , _ = self.sock.recvfrom(MAX_PCKT_SIZE)
-        data = Packet(data).payload.decode("utf-8")
-        if data=="syn":
-            self.acceptSyn = True
-            print("Received the syn packet")  
-            self._sendAck()
+        self.clientaddress = None
+        self.key = b''
+        self.handler = None # creating an handler object to handle the client
     
-    def _sendAck(self):
-        self.ackpacket = Packet(b'0001|:|:|ack')
-        self.sock.sendto(self.ackpacket.encode(),self.address)
-        self.ackFlag=True
-        print("Send the Ack packet")
-        time.sleep(2)
-        self._receiveKey()
-    
-    def _receiveKey(self):
-        data,_ = self.sock.recvfrom(MAX_PCKT_SIZE)
-        data = Packet(data).payload.decode("utf-8")
-        if len(data) >0:
-            self.key = data
-            print("Key is Received",self.key)
-    
-    def _AckHeartBeat(self):
+    def __readData(self,packet,address):
+        """This function receives the data from the listener thread and store
+        the client address if already created else call the __readData of the handler
         """
-        This function will receive the heartbeat
-        and this should be done simulataneously with
-        transfering the files
-        """
-        pass
+        if self.handler != None:
+            self.handler.__readData(packet,address)
+        else:
+            self.clientaddress = address            
+    
+    def bind(self, address):
+        """This function is used to bind the server socket to the address
 
-    def bind(self,address):
-        self.sock.bind(address)
+        Args:
+            address ([tuple]): Contains the address of the server
+        """
         self.address = address
-        self.binded = True
-
-    def listen(self):
-        if not self.binded:
-            raise Exception("Socket not binded")
-        self.listening = True
-        self._receiveSyn()
+        self.key = b''.join(self.address)
+        self.sock.bind(address)
+        self.isBinded = True
     
-    def receiveFrom(self):
-        pass
+    def listen(self):
+        """This function is used to make the server socket to listen 
+        by creating a listener to the server by passing the socket to the constructor
+        and start the thread.
+        """
+        if not self.isBinded:
+            raise Exception("Socket is not found")
+        self.isListening=True
+        self.Listener = Listener(self) # make the listener for the server and passing the
+                                       # self to the constructor
+        # starting the listener
+        self.Listener.start() 
 
+    def accept(self):
+        """This function accept the new connection and send the handler object to the 
+           client so that it can access it
+        """
+        self.handler = self.__createHandler()
+        return (self.handler,self.address)   
+
+    def __createHandler(self): 
+        """This function creates an handler for the client and send it back
+        """
+        return Handler(self,self.clientaddress,self.debug)
+    
     def close(self):
+        """This function closes the connection of the handler
+        """
+        self.isListening = False
+        self.isClosed = False
+        self.handler.close()  # calling the close method of the handler
+        self.Listener.finish()
+    
+class Handler():
+    def __init__(self,derudp,clientAddress,debug=False):
+        self.sock = derudp.sock
+        self.derudp = derudp
+        self.debug = debug
+        self.clientAddress = clientAddress
+        self.seqSend = 0
+        self.seqNext = 0
+        self.isConnected = True
+        self.runtimer = 0
+        self.__sendSynAck()
+
+    def __readData(self,packet,address):
+        if self.debug:
+            writeLog("Handler reading Data from {} and \n {}".format(address,packet))
+        if packet.syn: # got the syn packet send synack
+            self.__sendSynAck()
+            return
+        if packet.fin: # got the fin packet send finack
+            self.__sendFinAck()
+            return      
+
+    def __sendSynAck(self):
+        packet = Packet()
+        packet.syn=1
+        packet.ack=1
+        if self.debug:
+            writeLog("Send Syn Ack packet\n",packet)
+        self.sock.sendto(packet.encode(),self.clientAddress)
+
+    def __sendFinAck(self):
+        packet = Packet()
+        self.isConnected = False
+        self.seqSend = self.seqNext
+        packet.fin=1
+        packet.ack=1
+        if self.debug:
+            writeLog("Send Fin Ack packet\n",packet)
+        self.sock.sendto(packet.encode(),self.clientAddress)
+    
+    def __finAck(self):
+        """This function finishes the timer and close the process
+        """
+        self.seqSend = self.seqNext
+        if self.runtimer!=None and self.runtimer.running:
+            self.runtimer.finish()
+    
+    def close(self):
+        """This function closes the connection of handler
+        """
+        self.isClosed = True
+        if self.isConnected:
+            self.isConnected = False
+    
+    def __readData(self,packet,address):
+        pass
+    
+    def __writeData(self,packet):
+        pass
+        
+    def recv(self,maxBytes):
+        pass
+    
+    def send(self,data):
         pass
 
-    def _sendLostPacket(self):
+    def timeout(self,data):
         pass
-
-
-def test():
-    server = DerudpServer()
-    server.bind(("127.0.0.1",6789))
-    server.listen()
-
-test()
