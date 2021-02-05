@@ -26,7 +26,7 @@ class Listener(threading.Thread):
                 time.sleep(POLL_INTERVAL)
             if self.running == False:
                 print("Listener finished...")
-                exit(0)
+                return
 
     def finish(self):
         self.running = False

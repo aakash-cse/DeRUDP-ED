@@ -143,8 +143,8 @@ class ClientHandler:
         self.closed = True
         if self.connected:
             self.connected = False
-            # Wait till all data is sent
-            while len(self.write_buffer) > 0:
+            cnt = 0
+            while len(self.write_buffer) > 0 and cnt < 100:
                 time.sleep(POLL_INTERVAL)
             pckt = Packet()
             pckt.fin = 1

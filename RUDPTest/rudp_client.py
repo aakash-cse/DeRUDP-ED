@@ -191,8 +191,9 @@ class RUDPClient:
             pckt = Packet()
             pckt.fin = 1
             self.write(pckt)
-            # Wait for FIN-ACK
-            while len(self.write_buffer) > 0:
+            # Wait for FIN-ACKcnt = 0
+            cnt = 0
+            while len(self.write_buffer) > 0 and cnt < 100:
                 time.sleep(POLL_INTERVAL)
         if self.timer != None and self.timer.running:
             self.timer.finish()
