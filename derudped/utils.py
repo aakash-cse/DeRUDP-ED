@@ -15,7 +15,7 @@ TIMEOUT = 0.2 # seconds
 RWND = 10 # Retransmission window size (maximum no of packets to be retransmitted after timeout)
 
 #Packet class
-class Packet:
+class Packet():
     """
         Class Definition of the packet
     """
@@ -28,12 +28,12 @@ class Packet:
         self.payload = b''
         if data:
             self.decode(data)
-    
+
     def decode(self, data):
-        flags = data[0]
-        self.syn = int((flags & 4) > 0)
-        self.ack = int((flags & 2) > 0)
-        self.fin = int((flags & 1) > 0)
+        f = data[0]
+        self.syn = int((f & 4) > 0)
+        self.ack = int((f & 2) > 0)
+        self.fin = int((f & 1) > 0)
         self.seqno = int.from_bytes(data[1:5], 'big')
         self.ackno = int.from_bytes(data[5:9], 'big')
         self.payload = data[9:]
@@ -49,9 +49,9 @@ class Packet:
         ack = self.ack
         ack <<= 1
         fin = self.fin
-        flags = syn | ack | fin
+        f = syn | ack | fin
         data = b''
-        data += flags.to_bytes(1, 'big')
+        data += f.to_bytes(1, 'big')
         data += self.seqno.to_bytes(4, 'big')
         data += self.ackno.to_bytes(4, 'big')
         data += self.payload
@@ -72,7 +72,7 @@ class Listener(threading.Thread):
     def __init__(self, derudp_sock):
         threading.Thread.__init__(self)
         self.derudp_sock = derudp_sock
-        self.running = True
+        self.isRunning = True
         
     def run(self):
         # make the socket to unblock for connection
@@ -86,11 +86,11 @@ class Listener(threading.Thread):
                 self.derudp_sock.__readData(pckt, source_addr)
             except socket.error:
                 time.sleep(POLL_INTERVAL)
-            if self.running == False:
+            if not self.isRunning:
                 return
 
-    def finish(self):
-        self.running = False
+    def done(self):
+        self.isRunning = False
 
 class AESCipher():
     """Used to encrypt and decrypt the data send into the packets
@@ -140,10 +140,10 @@ class Timer(threading.Thread):
             self.callback()
         self.isRunning = False
     
-    def finish(self):
+    def done(self):
         """Finish will set the running flag to false
         """
-        self.running = False
+        self.isRunning = False
 
 def writeLog(log_data):
     """Function used to write the log in the log file for debugging

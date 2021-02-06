@@ -1,3 +1,16 @@
+from derudped.derudp_client import DerudpClient
+
+client = DerudpClient()
+client.connect(("127.0.0.1", 8000))
+print('Connected established...')
+
+client.send('hello'.encode('ascii'))
+msg = client.recv(1000)
+print("Server messsage:",msg.decode('ascii'))
+
+client.close()
+
+'''
 from derudped.packet import  Packet
 
 pack1 = Packet(b'0001|:|:|A')
@@ -20,3 +33,4 @@ while flag:
         clientSock.sendto(dataqueue[i].encode(), (UDP_IP_ADDRESS, UDP_PORT_NO))
     flag = False
 clientSock.close()
+'''

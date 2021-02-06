@@ -1,4 +1,4 @@
-from rudp_client import RUDPClient
+from .rudp_client import RUDPClient
 
 client = RUDPClient()
 client.connect(("127.0.0.1", 8000))

@@ -1,6 +1,6 @@
 import socket
 import time
-from .utils import *
+from utils import Packet,AESCipher,Timer,Listener,POLL_INTERVAL,MAX_BYTES,MAX_PCKT_SIZE,RWND
 from threading import Lock
 
 class DerudpServer():
@@ -30,7 +30,7 @@ class DerudpServer():
             address ([tuple]): Contains the address of the server
         """
         self.address = address
-        self.key = b''.join(self.address)
+        self.key = '{}{}'.format(list(self.address)[0],list(self.address)[1])
         self.sock.bind(address)
         self.isBinded = True
     
@@ -65,7 +65,7 @@ class DerudpServer():
         self.isListening = False
         self.isClosed = False
         self.handler.close()  # calling the close method of the handler
-        self.Listener.finish()
+        self.Listener.done()
     
 class Handler():
     def __init__(self,derudp,clientAddress,debug=False):
@@ -120,8 +120,8 @@ class Handler():
         """This function finishes the timer and close the process
         """
         self.seqSend = self.seqNext
-        if self.runtimer!=None and self.runtimer.running:
-            self.runtimer.finish()
+        if self.runtimer!=None and self.runtimer.isRunning:
+            self.runtimer.done()
     
     def close(self):
         """This function closes the connection of handler

@@ -2,7 +2,7 @@ from __future__ import absolute_import
 import socket
 import time
 from threading import Lock
-from .utils import *
+from utils import Packet,AESCipher,Timer,Listener,POLL_INTERVAL,MAX_BYTES,MAX_PCKT_SIZE,RWND
 
 class DerudpClient():
     def __init__(self,debug=False):
@@ -39,7 +39,7 @@ class DerudpClient():
         self.Listener = Listener(self) # passing the client socket for the listener
         self.Listener.start()
         self.serverAddress = address
-        self.key = b''.join(address)
+        self.key = '{}{}'.format(list(self.serverAddress)[0],list(self.serverAddress)[1])
         self.cipher = AESCipher(self.key)
         self.__writeData(packet)
         # wait for the connection to establish so make listener to sleep
@@ -248,7 +248,7 @@ class DerudpClient():
         """This funciton will perform clean up as close function is already called
         """
         self.seqSend = self.seqNext
-        if self.timer!=None and self.timer.running:
-            self.timer.finish()
-        self.Listener.finish()
+        if self.timer!=None and self.timer.isRunning:
+            self.timer.done()
+        self.Listener.done()
 

@@ -1,3 +1,17 @@
+from derudped.derudp_server import DerudpServer
+import time
+
+server = DerudpServer()
+server.bind(("127.0.0.1", 8000))
+server.listen()
+
+client, addr = server.accept()
+print('Client connected...', addr)
+
+client.close()
+server.close()
+
+'''
 from derudped.packet import Packet
 
 ## Again we import the necessary socket python module
@@ -24,4 +38,5 @@ out = sorted(out,key=getseq)
 for val in out:
     print(val.payload)
 serverSock.close()
+'''
 

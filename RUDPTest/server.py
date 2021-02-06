@@ -1,4 +1,4 @@
-from rudp_server import RUDPServer 
+from .rudp_server import RUDPServer 
 import time
 
 server = RUDPServer(debug=True)
@@ -7,10 +7,6 @@ server.listen()
 
 client, addr = server.accept()
 print('Client connected...', addr)
-'''
-data = client.recv(1000)
-print('Client message:', data.decode('ascii'))
-client.send(data)
-'''
+
 client.close()
 server.close()
