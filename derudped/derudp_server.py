@@ -1,6 +1,7 @@
 import socket
 import time
 from .utils import *
+from threading import Lock
 
 class DerudpServer():
     def __init__(self,debug=False):
@@ -74,8 +75,17 @@ class Handler():
         self.clientAddress = clientAddress
         self.seqSend = 0
         self.seqNext = 0
+        self.seqReceived = 0
+        self.mutexW = Lock()
+        self.mutexR = Lock()
         self.isConnected = True
         self.runtimer = 0
+        self.writeBuff = [None] * MAX_BYTES
+        self.readBuff = b''
+        self.order = [None] * MAX_BYTES
+        self.buffer = 0
+        self.key = derudp.key
+        self.cipher = AESCipher(self.key)
         self.__sendSynAck()
 
     def __readData(self,packet,address):
@@ -93,7 +103,7 @@ class Handler():
         packet.syn=1
         packet.ack=1
         if self.debug:
-            writeLog("Send Syn Ack packet\n",packet)
+            writeLog("Send Syn Ack packet\n{}".format(packet))
         self.sock.sendto(packet.encode(),self.clientAddress)
 
     def __sendFinAck(self):
@@ -103,7 +113,7 @@ class Handler():
         packet.fin=1
         packet.ack=1
         if self.debug:
-            writeLog("Send Fin Ack packet\n",packet)
+            writeLog("Send Fin Ack packet\n{}".format(packet))
         self.sock.sendto(packet.encode(),self.clientAddress)
     
     def __finAck(self):
@@ -119,18 +129,156 @@ class Handler():
         self.isClosed = True
         if self.isConnected:
             self.isConnected = False
-    
-    def __readData(self,packet,address):
-        pass
+            while self.seqSend < self.seqNext:
+                time.sleep(POLL_INTERVAL)
+            # send FIN
+            packet = Packet()
+            packet.fin = 1
+            self.__writeData(packet)
+            cnt = 0
+            while self.seqSend < self.seqNext and cnt < 100: 
+                time.sleep(POLL_INTERVAL)
+                cnt += 1
+        self.__finAck()
     
     def __writeData(self,packet):
-        pass
+        self.mutexW.acquire()
+        packet.seqno = self.seqNext
+        self.writeBuff[self.seqNext%MAX_BYTES] = packet
+        self.seqNext+=1
+        self.mutexW.release()
+        if self.debug:
+            writeLog("Written the data packet\n{}".format(packet))
+        self.sock.sendto(packet.encode(),self.clientAddress)
+        if self.runtimer == None or not self.runtimer.isRunning:
+            self.runtimer = Timer(self.timeoutcallback(),TIMEOUT)
+            self.runtimer.start()
+    
+    def __readData(self,packet,address):
+        """This function read the data from the 
+
+        Args:
+            packet ([Packet]): Data packet 
+            address ([type]): clientAddress
+        """
+        if self.debug:
+            writeLog("Packet received\n{}".format(packet))
         
+        if self.clientAddress==address:
+            if packet.syn:
+                self.__sendSynAck()
+                return
+            if packet.fin and packet.ack:
+                self.__finAck()
+                return
+            if packet.fin:
+                self.__sendFinAck()
+                return
+
+            if packet.ack:
+                if packet.seqno <= self.seqSend:
+                    return
+                self.mutexW.acquire()
+                ite = self.seqSend % MAX_BYTES
+                v = self.seqSend
+                while self.seqSend<packet.ackno:
+                    if self.writeBuff[ite]:
+                        self.buffer -= len(self.writeBuff[ite].payload)
+                    self.writeBuff[ite] = None
+                    v+=1
+                    ite+=1
+                    if ite>=MAX_BYTES:
+                        ite-=MAX_BYTES
+                self.seqSend = v
+                self.mutexW.release()
+            else:
+                ite = packet.seqno%MAX_BYTES
+                if packet.seqno>=self.seqReceived:
+                    if self.order[ite] == None:
+                        self.order[ite] = packet
+                    else:
+                        self.dropped=1
+                if packet.seqno == self.seqNext:
+                    i = ite
+                    data = b''
+                    seq = packet.seqno
+                    while 1:
+                        if self.order[i] == None:
+                            break
+                        data +=self.order[i].payload
+                        self.order[i] = None
+                        i+=1
+                        seq+=1    
+                        if i>=MAX_BYTES:
+                            i-=MAX_BYTES
+                    self.mutexR.acquire()
+                    self.readBuff+=data
+                    self.seqReceived = seq
+                    self.mutexR.release()
+                packet = Packet()
+                packet.ack = 1
+                packet.ackno = self.seqReceived
+                self.sock.sendto(packet.encode(),address)            
+
     def recv(self,maxBytes):
-        pass
+        while True:
+            if len(self.readBuff) > 0:
+                self.mutexR.acquire()
+                l = min(len(self.readBuff), maxBytes)
+                data = self.readBuff[:l]
+                self.readBuff = self.readBuff[l:]
+                self.mutexR.release()
+                return data
+            if not self.isConnected:
+                return None
+            time.sleep(POLL_INTERVAL)
     
     def send(self,data):
-        pass
+        if self.isClosed and not self.isConnected:
+            raise Exception("Cannot send the data")
+        while len(data) > 0:
+            rem = min(len(data), MAX_PCKT_SIZE)
+            payload = data[:rem] # replace the data with the queue
+            # wait till receiver has acked enough bytes
+            while self.buffer + rem > MAX_BYTES:
+                time.sleep(POLL_INTERVAL)
+            self.buffer += rem
+            data = data[rem:] 
+            pckt = Packet()
+            pckt.payload = self.cipher.encrypt(payload) # encrypting the data
+            self.__writeData(pckt)
 
-    def timeout(self,data):
-        pass
+    def timeoutcallback(self):
+        """This function will be called as an callback for the timer thread
+
+        Args:
+            data ([Packet]): Packet in which the data is send format
+        """
+        # no packet to send
+        if self.seqSend == self.seqNext:
+            return
+        cnt = 0
+        i = self.seqSend
+        idx = i % MAX_BYTES
+        b = self.seqNext
+        while i < b:
+            if self.writeBuff[idx] == None:
+                i += 1
+                idx += 1
+                if idx >= MAX_BYTES:
+                    idx -= MAX_BYTES
+                continue
+            cnt += 1
+            packet = self.writeBuff[idx]
+            if self.debug:
+                writeLog("Data sent\n{}".format(packet))
+            self.sock.sendto(packet.encode(), self.clientAddress)
+            if cnt >= RWND:
+                break
+            i += 1
+            idx += 1
+            if idx >= MAX_BYTES:
+                idx -= MAX_BYTES
+        # restart timer
+        self.timer = Timer(self.timeoutcallback(), TIMEOUT)
+        self.timer.start()

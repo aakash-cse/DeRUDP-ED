@@ -76,7 +76,7 @@ class Listener(threading.Thread):
         
     def run(self):
         # make the socket to unblock for connection
-        self.derudp_sock.sock.setblocking(False)
+        self.derudp_sock.sock.setblocking(0)
         # start listener
         while True:
             # Receive datagram
