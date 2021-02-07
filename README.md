@@ -26,3 +26,11 @@
 8. The sending data area stores the packet number of the current queue to be sent.
 9. The receiver also has the same buffer-queue used to store the received data packets
 10. Extract the received data packet and reorder the unordered packets.
+
+
+
+to do 
+heartbeat packet
+retransmission
+changing timeout values 
+adding ftp, smtp on rudp 
