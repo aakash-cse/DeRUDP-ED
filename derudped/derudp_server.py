@@ -1,27 +1,37 @@
 import socket
 import time
-from utils import Packet,AESCipher,Timer,Listener,POLL_INTERVAL,MAX_BYTES,MAX_PCKT_SIZE,RWND
 from threading import Lock
+from .aes import AESCipher
+from .timer import Timer
+from .listener import Listener
+from .const import POLL_INTERVAL,MAX_BYTES,MAX_PCKT_SIZE,RWND,TIMEOUT
+from .packet import Packet
+from .utils import writeLog
 
 class DerudpServer():
     def __init__(self,debug=False):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.connection = {}
         self.isBinded = False
         self.isListening = False
         self.isClosed = False
         self.debug = debug
-        self.clientaddress = None
+        self.newConnection = []
         self.key = b''
-        self.handler = None # creating an handler object to handle the client
-    
+        self.debug = debug
+
     def __readData(self,packet,address):
         """This function receives the data from the listener thread and store
         the client address if already created else call the __readData of the handler
         """
-        if self.handler != None:
-            self.handler.__readData(packet,address)
-        else:
-            self.clientaddress = address            
+        if address in self.connection:
+            self.connection[address].__readData(packet,address)
+            return
+        if packet.syn:
+            if not self.isListening:
+                return
+            self.__newConnection(address)
+            return
     
     def bind(self, address):
         """This function is used to bind the server socket to the address
@@ -47,25 +57,41 @@ class DerudpServer():
         # starting the listener
         self.Listener.start() 
 
+    def __newConnection(self,clientAddress):
+        """This function will create an new connection with the client address
+
+        Args:
+            clientAddress ([tuple]): 
+        """
+        self.connection[clientAddress] = Handler(self,clientAddress,debug=self.debug)
+        self.newConnection.append(clientAddress)
+
     def accept(self):
         """This function accept the new connection and send the handler object to the 
            client so that it can access it
         """
-        self.handler = self.__createHandler()
-        return (self.handler,self.address)   
-
-    def __createHandler(self): 
-        """This function creates an handler for the client and send it back
-        """
-        return Handler(self,self.clientaddress,self.debug)
+        while True:
+            if len(self.newConnection)>0:
+                address = self.newConnection[0]
+                self.newConnection = self.newConnection[1:]
+                return self.connection[address],address
+            time.sleep(POLL_INTERVAL)
     
     def close(self):
         """This function closes the connection of the handler
         """
         self.isListening = False
         self.isClosed = False
-        self.handler.close()  # calling the close method of the handler
+        for add in self.newConnection:
+            nc = self.connection[add]
+            nc.close()
         self.Listener.done()
+    
+    def close_connection(self, addr):
+        '''
+        Handle close upcall from client handler. Remove connection from data structure
+        '''
+        del self.connection[addr]
     
 class Handler():
     def __init__(self,derudp,clientAddress,debug=False):
@@ -86,17 +112,7 @@ class Handler():
         self.buffer = 0
         self.key = derudp.key
         self.cipher = AESCipher(self.key)
-        self.__sendSynAck()
-
-    def __readData(self,packet,address):
-        if self.debug:
-            writeLog("Handler reading Data from {} and \n {}".format(address,packet))
-        if packet.syn: # got the syn packet send synack
-            self.__sendSynAck()
-            return
-        if packet.fin: # got the fin packet send finack
-            self.__sendFinAck()
-            return      
+        self.__sendSynAck()   
 
     def __sendSynAck(self):
         packet = Packet()
