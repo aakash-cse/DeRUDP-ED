@@ -32,6 +32,7 @@
 [todo]
 * heartbeat packet to be checked
 * Retranmission to be changed dynamically
+* Need to change the list to python queue
 * Need to fix the recurrsive error
 * Need to plot the results and acculumate the content together
 <br>
