@@ -1,8 +1,12 @@
-from __future__ import absolute_import
 import socket
 import time
 from threading import Lock
-from utils import Packet,AESCipher,Timer,Listener,POLL_INTERVAL,MAX_BYTES,MAX_PCKT_SIZE,RWND
+from .aes import AESCipher
+from .timer import Timer
+from .listener import Listener
+from .const import POLL_INTERVAL,MAX_BYTES,MAX_PCKT_SIZE,RWND,TIMEOUT
+from .packet import Packet
+from .utils import writeLog
 
 class DerudpClient():
     def __init__(self,debug=False):
