@@ -29,8 +29,11 @@
 
 
 
-to do 
-heartbeat packet
-retransmission
-changing timeout values 
-adding ftp, smtp on rudp 
+[todo]
+* heartbeat packet to be checked
+* Retranmission to be changed dynamically
+* Need to fix the recurrsive error
+* Need to plot the results and acculumate the content together
+<br>
+[Easily done]
+	> can utilise the ftp, chat application
